@@ -26,11 +26,16 @@ function[EOF_ts,SV_ts,t] = mk_seofs_ts(data,time,neofs,binsize)
     t                  = [];
     EOF_ts             = [];
     SV_ts              = [];
+
+    % Define a vector of time indices not in padded regions
+    tis = (pad+1):(td-pad);
     
-    for ii = (pad+1):(td-pad)
+    for ii = 1:length(tis)
+        
+        ti = tis(ii);
         
         % Define a time range
-        tr             = (ii-pad):(ii+pad);
+        tr             = (ti-pad):(ti+pad);
         
         % Select time window
         dat            = data(:,tr,:);
@@ -39,7 +44,8 @@ function[EOF_ts,SV_ts,t] = mk_seofs_ts(data,time,neofs,binsize)
         [sU,sS]        = mk_seofs(dat,neofs);
         EOF_ts(:,:,ii) = sU;
         SV_ts(:,ii)   = sS;
-        t(ii)          = time(ii);
+        t(ii)          = time(ti);
+        
     end
 
 end
@@ -60,7 +66,7 @@ function [sU,sS] = mk_seofs(dat,neofs)
     datnm        = reshape(dat,sd,td*nd)-mean(reshape(dat,sd,td*nd),2);
     [sUa,sSa,~]  = svd(datnm,'econ');
     sU           = sUa(:,1:neofs);
-    sS           = sSa(1:neofs);
+    sS           = diag(sSa(1:neofs,1:neofs));
 
 end
 

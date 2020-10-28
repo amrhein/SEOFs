@@ -24,16 +24,22 @@ function[wts_ts,t] = mk_sproj_ts(data,time,patts,binsize)
     t                = [];
     wts_ts           = [];
     
-    for ii = (pad+1):(td-pad)
+    % Define a vector of time indices not in padded regions
+    tis = (pad+1):(td-pad);
+
+    for ii = 1:length(tis)
+        
+        ti = tis(ii);
+
         % Define a time range
-        tr           = (ii-pad):(ii+pad);
+        tr           = (ti-pad):(ti+pad);
         
         % Select time window
         dat          = data(:,tr,:);
         
         % Compute weights and save
         wts_ts(:,ii) = mk_sproj(dat,patts);
-        t(ii)        = time(ii);
+        t(ii)        = time(ti);
     end
 
 end
