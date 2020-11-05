@@ -3,7 +3,7 @@
 
 import numpy as np
 
-mk_seofs_ts(data,time,neofs,binsize)
+def mk_seofs_ts(data,time,neofs,binsize):
     """
     Function to compute "snapshot" projections of patterns onto ensemble
     model output
@@ -26,7 +26,7 @@ mk_seofs_ts(data,time,neofs,binsize)
     computations use the same number of times.
     """
     
-    pad                = np.floor(binsize/2)
+    pad                = np.floor(binsize/2) #problem here w indent/unindent
     [td,_,_]           = data.shape
     
     t                  = []
@@ -36,7 +36,7 @@ mk_seofs_ts(data,time,neofs,binsize)
     # Define a vector of time indices not in padded regions
     tis = np.arange(pad,td-pad)
     
-    for ii in np.arange(tis)
+    for ii in np.arange(tis):
         
         ti = tis[ii]
         
@@ -51,13 +51,11 @@ mk_seofs_ts(data,time,neofs,binsize)
         EOF_ts[:,:,ii] = sU
         SV_ts[:,ii]    = sS
         t[ii]          = time(ti)
-        
-    end
 
     return EOF_ts, SV_ts, t
 
 
-def mk_seofs(dat,neofs)
+def mk_seofs(dat,neofs):
      """
      Function to compute "snapshot" EOFs from ensemble model output
     
@@ -92,7 +90,7 @@ def mk_seofs(dat,neofs)
     return sU, sS
 
 
-def mk_sproj_ts(data,time,patts,binsize)
+def mk_sproj_ts(data,time,patts,binsize):
 
     """
     Function to compute "snapshot" projections of patterns onto ensemble
@@ -122,7 +120,7 @@ def mk_sproj_ts(data,time,patts,binsize)
     # Define a vector of time indices not in padded regions
     tis = np.arange(pad,td-pad)
     
-    for ii in np.arange(tis)
+    for ii in np.arange(tis):
         
         ti = tis[ii]
         
@@ -133,14 +131,12 @@ def mk_sproj_ts(data,time,patts,binsize)
         dat            = data[tr,:,:]
         
         # Compute weights and save
-        wts_ts[]:,ii]   = mk_sproj(dat,patts)
+        wts_ts[][:,ii]   = mk_sproj(dat,patts)
         t[ii]          = time[ti]
-        
-    end
 
     return wts_ts, t
 
-def mk_sproj(dat,patts)
+def mk_sproj(dat,patts):
 
     """
     Function to compute "snapshot" projections of patterns onto ensemble
