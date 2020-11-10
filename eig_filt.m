@@ -1,5 +1,6 @@
 % Make an eigenvector filter. See if I can make commuting matrices by
 % making small adjustments st two datasets have the same eigenvectors.
+% Upshot: I cannot.
 
 s0 = 8;
 s1 = 5;
