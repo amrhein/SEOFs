@@ -26,6 +26,7 @@ def mk_seofs_ts(data,time,neofs,binsize):
     computations use the same number of times.
     """
     
+<<<<<<< HEAD
     pad                = int(np.floor(binsize/2))
     [td,sd,_]           = data.shape
 
@@ -38,6 +39,21 @@ def mk_seofs_ts(data,time,neofs,binsize):
     SV_ts              = np.empty([ltis,neofs])
 
     for ii,ti in enumerate(tis):
+=======
+    pad                = np.floor(binsize/2) #problem here w indent/unindent
+    [td,_,_]           = data.shape
+    
+    t                  = []
+    EOF_ts             = []
+    SV_ts              = []
+
+    # Define a vector of time indices not in padded regions
+    tis = np.arange(pad,td-pad)
+    
+    for ii in np.arange(tis):
+        
+        ti = tis[ii]
+>>>>>>> 15e860c81127eb30a42a26aff5e3663222296fa4
         
         # Define a time range
         tr             = np.arange(ti-pad,ti+pad+1)
@@ -47,16 +63,24 @@ def mk_seofs_ts(data,time,neofs,binsize):
 
         # Compute weights and save
         sU,sS          = mk_seofs(dat,neofs)
+<<<<<<< HEAD
         EOF_ts[ii,:,:] = sU
         #import pdb
         #pdb.set_trace()       
         SV_ts[ii,:]   = sS
         t[ii]         = time[ti]
         
+=======
+        EOF_ts[:,:,ii] = sU
+        SV_ts[:,ii]    = sS
+        t[ii]          = time(ti)
+
+>>>>>>> 15e860c81127eb30a42a26aff5e3663222296fa4
     return EOF_ts, SV_ts, t
 
 
 def mk_seofs(dat,neofs):
+<<<<<<< HEAD
     """
     Function to compute "snapshot" EOFs from ensemble model output
 
@@ -70,6 +94,21 @@ def mk_seofs(dat,neofs):
     sS        Same as sU, but a vector of singular values
     """
 
+=======
+     """
+     Function to compute "snapshot" EOFs from ensemble model output
+    
+     INPUTS
+     data      Modal data matrix with dimensions (time,space,nens)
+     neofs     Number of snapshot EOFs to output as a function of time.
+    
+     OUTPUTS
+     sU        Left singular vectors (EOFs) computed over ensemble number
+               and time for this particular time bin
+     sS        Same as sU, but a vector of singular values
+     """
+    
+>>>>>>> 15e860c81127eb30a42a26aff5e3663222296fa4
     # Change dimensions of dat from (time, space, nens) to (space,time,nens) to allow for reshaping
     dats         = np.transpose(dat,(1,0,2))
     [sd,td,nd]   = dats.shape
@@ -121,11 +160,18 @@ def mk_sproj_ts(data,time,patts,binsize):
     tis                = np.arange(pad,td-pad)
     ltis               = len(tis) 
     
+<<<<<<< HEAD
     t                  = np.empty(ltis)
     wts_ts             = np.empty([ltis,pd])
 
     for ii,ti in enumerate(tis):
 
+=======
+    for ii in np.arange(tis):
+        
+        ti = tis[ii]
+        
+>>>>>>> 15e860c81127eb30a42a26aff5e3663222296fa4
         # Define a time range
         tr             = np.arange(ti-pad,ti+pad+1)
 
@@ -133,7 +179,11 @@ def mk_sproj_ts(data,time,patts,binsize):
         dat            = data[tr,:,:]
 
         # Compute weights and save
+<<<<<<< HEAD
         wts_ts[ii,:]   = mk_sproj(dat,patts)
+=======
+        wts_ts[][:,ii]   = mk_sproj(dat,patts)
+>>>>>>> 15e860c81127eb30a42a26aff5e3663222296fa4
         t[ii]          = time[ti]
 
     return wts_ts, t
