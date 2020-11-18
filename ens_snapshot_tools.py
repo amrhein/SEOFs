@@ -301,7 +301,9 @@ def KLdiv(C0,C1,m0,m1):
     kld   Kullback-Leibler divergence
  
     """
+    [_,d] = C1.shape
     C1i = np.linalg.inv(C1)
-    kld = 1/2 * ( np.trace(C1i.dot(C0)) + (m0-m1).T.dot(C1i).dot(m0-m1) + np.log(np.linalg.det(C1)/np.linalg.det(C1)) )
+    kld = 1/2 * ( np.trace(C1i.dot(C0)) + (m0-m1).T.dot(C1i).dot(m0-m1) + np.log(np.linalg.det(C1)/np.linalg.det(C0)) -d )
+    # kld = 1/2 * ( np.trace(C1i.dot(C0)))
 
     return kld
