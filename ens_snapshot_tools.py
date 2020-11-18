@@ -184,7 +184,7 @@ def mk_covs(data,time,binsize):
     As such, for large model output it is recommended that data be first projected into a reduced basis.
     
     INPUTS
-    data      Modal data matrix with dimensions (space,time,nens)
+    data      Modal data matrix with dimensions (time,space,nens)
     time      Time axis of model output
     binsize   Odd (symmetric) length of bin in time in which to compute
               SEOFs
@@ -194,7 +194,7 @@ def mk_covs(data,time,binsize):
     t         Time for covariance matrix time series
   
     """
-    
+
     pad                = int(np.floor(binsize/2))
     [td,sd,_]          = data.shape
 
@@ -224,8 +224,11 @@ def mk_covs(data,time,binsize):
         # Remove the mean over time and ensembles
         datnm        = datr - datr.mean(axis=1, keepdims=True)
         
+        #import pdb
+        #pdb.set_trace()
+        
         # Save the covariance matrix. Warning -- only do this with reduced space!
-        C[ii,:,:] = datnm.dot(datnm.T)
+        C[ii,:,:] = 1/(td*nd-1)*datnm.dot(datnm.T)
         
         # Corresponding time
         t[ii]          = time[ti]
@@ -248,7 +251,7 @@ def reduce_space(data,nEOF):
     nEOF      Number of EOFs retained
 
     OUTPUTS
-    rbdor     Reduced-space (eof index, time, nens) data matrix
+    rbdor     Reduced-space (time, eof index, nens) data matrix
     ur        EOFs used to project reduced-space back into full state
     s         Full vector of singular values
   
@@ -266,7 +269,10 @@ def reduce_space(data,nEOF):
     [u,s,vt] = np.linalg.svd(datr,full_matrices=False)
 
     # This is the output in the reduced basis. Keep nEOF
-    rbd          = (vt[:nEOF,:]*s[:nEOF,None]).T
+    # rbd          = (vt[:nEOF,:]*s[:nEOF,None]).T
+
+    # This is the output in the reduced basis. Keep nEOF
+    rbd          = (vt[:nEOF,:]*s[:nEOF,None])
 
     # Reshape into original dimensions
     rbdo         = rbd.reshape(nEOF,td,nd)
