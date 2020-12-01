@@ -308,98 +308,69 @@ def KLdiv(C0,C1,m0,m1):
 
     return kld
 
-def klcomp(binsize):
-
-    nens = 13
-    nEOF = 500
-    reg = 1
-
-    # Load ctrl run
-
-    out = np.load('input/CESM_ctrl_wtd_SVD.npz')
-    u    = out['u']
-    s    = out['s']
-    vt   = out['vt']
-    lat  = out['lat']
-    lon  = out['lon']
-    time = out['time']
-    nt   = out['nt']
-    nlat = out['nlat']
-    nlon = out['nlon']
-
-    ds_TS = u.dot(np.diag(s)).dot(vt).reshape(1000,nlat,nlon)
-
-    [nt,nlat,nlon] = np.shape(ds_TS);
-
-    # Reshape the control run to look like a short ensemble simulation with 13 members
-    # New time length for these is 988 = 13*76
-    cnens = 13;
-    tdn   = int(np.floor(1000./cnens)*cnens)
-    el    = int(tdn/cnens)
-
-    # Reshape to give an ensemble axis and transpose to make the ordering consistent
-    ce1 = ds_TS[:(tdn),:,:].reshape(tdn,nlat*nlon).transpose([1,0])
-    ce2 = ce1.reshape(nlat*nlon,el,cnens)
-
-    # time, space, nens
-    ce  = ce2.transpose([1,0,2])
-
-    # Need to compute reduced-space form
-    [cer,uce,sce]  = reduce_space(ce,nEOF)
-
-    [Cc,tCc]       = mk_covs(cer,np.arange(el),binsize)
-    [tdc,_,_]      = Cc.shape
-    Cvc            = Cc.reshape(tdc,nEOF**2).T
-
-    # No smoothing for mean
-    [Ccm,tCcm]       = mk_covs(cer,np.arange(el),1)
-    [tdcm,_,_]       = Ccm.shape
-    Cvcm             = Ccm.reshape(tdcm,nEOF**2).T
-    Cmc = Cvcm.mean(axis=1, keepdims=True).reshape(nEOF,nEOF)
-
-    m0 = np.zeros(nEOF)
-    m1 = np.zeros(nEOF)
-
-    kldc = np.empty(tdc)
-    for ii in np.arange(tdc):
-        kldc[ii]   = KLdiv(Cc[ii,:,:]+reg*np.eye(nEOF),Cmc+reg*np.eye(nEOF),m0,m1)
-
-    # Now for LME
-
-    out = np.load('input/CESM_LME_all13_wtd_SVD.npz')
-    u    = out['u']
-    s    = out['s']
-    vt   = out['vt']
-    lat  = out['lat']
-    lon  = out['lon']
-    time = out['time']
-    nt   = out['nt']
-    nlat = out['nlat']
-    nlon = out['nlon']
-    nens = out['nens']
-
-    # EOF x time*nens
-    datr = (vt[:nEOF,:]*s[:nEOF,None])
-
-    # reshaped into timexEOFxnens
-    datrr = datr.reshape(nEOF,nt,nens).transpose(1,0,2)
-
-    # Get time-varying reduced-space covariances
-    [C,tC]        = mk_covs(datrr,time,binsize)
-    [td,_,_]      = C.shape
-    Cv            = C.reshape(td,nEOF**2).T
-
-    # No smoothing for mean
-    [Cm,tCm]        = mk_covs(cer,np.arange(el),1)
-    [tdm,_,_]       = Ccm.shape
-    Cvm             = Ccm.reshape(tdcm,nEOF**2).T
-    Cm = Cvm.mean(axis=1, keepdims=True).reshape(nEOF,nEOF)
-
-    m0 = np.zeros(nEOF)
-    m1 = np.zeros(nEOF)
-
-    kld = np.empty(td)
-    for ii in np.arange(td):
-        kld[ii] = KLdiv(C[ii,:,:]+reg*np.eye(nEOF),Cmc+reg*np.eye(nEOF),m0,m1)
-
-    return tC, kld, tCc, kldc
+me length for these is 988 = 13*76\n",
+    "    cnens = 13;\n",
+    "    tdn   = int(np.floor(1000./cnens)*cnens)\n",
+    "    el    = int(tdn/cnens)\n",
+    "\n",
+    "    # Reshape to give an ensemble axis and transpose to make the ordering consistent\n",
+    "    ce1 = ds_TS[:(tdn),:,:].reshape(tdn,nlat*nlon).transpose([1,0])\n",
+        "    ce2 = ce1.reshape(nlat*nlon,el,cnens)\n",
+            "\n",
+                "    # time, space, nens\n",
+                    "    ce  = ce2.transpose([1,0,2])\n",
+                        "\n",
+                            "    # Need to compute reduced-space form\n",
+                                "    [cer,uce,sce]   = ens.reduce_space(ce,nEOF)\n",
+                                    "\n",
+                                        "    [Cc,tCc]       = ens.mk_covs(cer,np.arange(el),binsize)\n",
+                                            "    [tdc,_,_]      = Cc.shape\n",
+                                                "    Cvc            = Cc.reshape(tdc,nEOF**2).T\n",
+                                                    "\n",
+                                                        "    # No smoothing for mean\n",
+                                                            "    [Ccm,tCcm]        = ens.mk_covs(cer,np.arange(el),1)\n",
+                                                                "    [tdcm,_,_]       = Ccm.shape\n",
+                                                                    "    Cvcm             = Ccm.reshape(tdcm,nEOF**2).T\n",
+                                                                        "    Cmc = Cvcm.mean(axis=1, keepdims=True).reshape(nEOF,nEOF)\n",
+                                                                            "\n",
+                                                                                "    m0 = np.zeros(nEOF)\n",
+                                                                                    "    m1 = np.zeros(nEOF)\n",
+                                                                                        "\n",
+                                                                                            "    kldc = np.empty(tdc)\n",
+                                                                                                "    for ii in np.arange(tdc):\n",
+                                                                                                    "        kldc[ii]   = ens.KLdiv(Cc[ii,:,:]+reg*np.eye(nEOF),Cmc+reg*np.eye(nEOF),m0,m1)\n",
+                                                                                                        "\n",
+                                                                                                            "        \n",
+                                                                                                                "        \n",
+                                                                                                                    "        \n",
+                                                                                                                        "\n",
+                                                                                                                            "    # Now for LME\n",
+                                                                                                                                "    \n",
+                                                                                                                                    "    out = np.load('input/CESM_LME_all13_wtd_SVD.npz')\n",
+                                                                                                                                        "    u    = out['u']\n",
+                                                                                                                                            "    s    = out['s']\n",
+                                                                                                                                                "    vt   = out['vt']\n",
+                                                                                                                                                    "    lat  = out['lat']\n",
+                                                                                                                                                        "    lon  = out['lon']\n",
+                                                                                                                                                            "    time = out['time']\n",
+                                                                                                                                                                "    nt   = out['nt']\n",
+                                                                                                                                                                    "    nlat = out['nlat']\n",
+                                                                                                                                                                        "    nlon = out['nlon']\n",
+                                                                                                                                                                            "    nens = out['nens']\n",
+                                                                                                                                                                                "\n",
+                                                                                                                                                                                    "    # EOF x time*nens\n",
+                                                                                                                                                                                        "    datr = (vt[:nEOF,:]*s[:nEOF,None])\n",
+                                                                                                                                                                                            "\n",
+                                                                                                                                                                                                "    # reshaped into timexEOFxnens\n",
+                                                                                                                                                                                                    "    datrr = datr.reshape(nEOF,nt,nens).transpose(1,0,2)\n",
+                                                                                                                                                                                                        "\n",
+                                                                                                                                                                                                            "    # Get time-varying reduced-space covariances\n",
+                                                                                                                                                                                                                "    [C,tC]        = ens.mk_covs(datrr,time,binsize)\n",
+                                                                                                                                                                                                                    "    [td,_,_]      = C.shape\n",
+                                                                                                                                                                                                                        "    Cv            = C.reshape(td,nEOF**2).T\n",
+                                                                                                                                                                                                                            "\n",
+                                                                                                                                                                                                                                "    # No smoothing for mean\n",
+                                                                                                                                                                                                                                    "    [Cm,tCm]        = ens.mk_covs(cer,np.arange(el),1)\n",
+                                                                                                                                                                                                                                        "    [tdm,_,_]       = Ccm.shape\n",
+                                                                                                                                                                                                                                            "    Cvm             = Ccm.reshape(tdcm,nEOF**2).T\n",
+                                                                                                                                                                                                                                                "    Cm = Cvm.mean(axis=1, keepdims=True).reshape(nEOF,nEOF
