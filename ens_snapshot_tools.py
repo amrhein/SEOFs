@@ -2,6 +2,7 @@
 # D Amrhein, November 2020
 
 import numpy as np
+import pdb
 
 def mk_seofs_ts(data,time,neofs,binsize):
     """
@@ -241,6 +242,43 @@ def mk_covs(data,time,binsize):
 
     return C,t
 
+def mk_avg_cov(data):
+    
+    """
+    Constructs a time series of covariance matrices from a data set with time, space, and ensemble dimensions.
+    In practice, "data" must have a small spatial dimension because we are explicitly storing covariance matrices.
+    As such, for large model output it is recommended that data be first projected into a reduced basis.
+    
+    INPUTS
+    data      Modal data matrix with dimensions (time,space,nens)
+    time      Time axis of model output
+    binsize   Odd (symmetric) length of bin in time in which to compute
+              SEOFs
+
+    OUTPUTS
+    C         3d matrix of time-evolving spatial covariances computed over ensemble space and, for binsize>1, a moving time window
+    t         Time for covariance matrix time series
+  
+    """
+
+    [td,sd,_]          = data.shape
+
+    # Change dimensions of dat from (time, space, nens) to (space,time,nens) to allow for reshaping
+    dats         = np.transpose(data,(1,0,2))
+    [sd,td,nd]   = dats.shape
+
+    # Reshape so that the second axis is a combination of time and ensemble dimensions.
+    # Default is 'C' indexing which should leave the time dimension intact.
+    datr         = dats.reshape((sd,td*nd))
+
+    # Remove the mean over time and ensembles
+    datnm        = datr - datr.mean(axis=1, keepdims=True)
+
+    # Save the covariance matrix. Warning -- only do this with reduced space! It's big!
+    C = 1/(td*nd-1)*datnm.dot(datnm.T)
+
+    return C
+
 def reduce_space(data,nEOF):
     
     """
@@ -269,9 +307,6 @@ def reduce_space(data,nEOF):
     [u,s,vt] = np.linalg.svd(datr,full_matrices=False)
 
     # This is the output in the reduced basis. Keep nEOF
-    # rbd          = (vt[:nEOF,:]*s[:nEOF,None]).T
-
-    # This is the output in the reduced basis. Keep nEOF
     rbd          = (vt[:nEOF,:]*s[:nEOF,None])
 
     # Reshape into original dimensions
@@ -284,6 +319,44 @@ def reduce_space(data,nEOF):
     ur           = u[:,:nEOF]
     
     return rbdor, ur, s
+
+def reduce_space_proj(data,ur):
+    
+    """
+    Projects a field (time, space, nens) onto the spatial basis set ur
+    
+    INPUTS
+    data      Modal data matrix with dimensions (space,time,nens)
+    ur        Spatial basis set (e.g., an orthogonal set, like EOFs)
+
+    OUTPUTS
+    rbdor     Reduced-space (time, eof index, nens) data matrix
+    ur        EOFs used to project reduced-space back into full state
+    s         Full vector of singular values
+  
+    """
+
+    _,nEOF = ur.shape
+    
+    # Change dimensions of dat from (time, space, nens) to (space,time,nens) to allow for reshaping
+    dats         = np.transpose(data,(1,0,2))
+    [sd,td,nd]   = dats.shape
+
+    # Reshape so that the second axis is a combination of time and ensemble dimensions.
+    # Default is 'C' indexing which will leave the time dimension intact.
+    datr         = dats.reshape((sd,td*nd))
+
+    #pdb.set_trace()
+    # This is the output in the reduced basis. Keep nEOF
+    rbd          = ur.T.dot(datr)
+    
+    # Reshape into original dimensions
+    rbdo         = rbd.reshape(nEOF,td,nd)
+
+    # Reorder dimensions like the original
+    rbdor = np.transpose(rbdo,(1,0,2))
+
+    return rbdor
 
 def KLdiv(C0,C1,m0,m1):
     """
@@ -304,9 +377,29 @@ def KLdiv(C0,C1,m0,m1):
     [_,d] = C1.shape
     C1i = np.linalg.inv(C1)
     kld = 1/2 * ( np.trace(C1i.dot(C0)) + (m0-m1).T.dot(C1i).dot(m0-m1) + np.log(np.linalg.det(C1)/np.linalg.det(C0)) -d )
-    # kld = 1/2 * ( np.trace(C1i.dot(C0)))
 
     return kld
+
+def JSdiv(C0,C1,m0,m1):
+    """
+    Computes Jensen-Shannon divergence between two (full-rank) Gaussian processes with sample
+    covariances matrices C0 and C1 and sample means m0 and m1. C0 and C1 must be full rank.
+    See https://en.wikipedia.org/wiki/Jensen%E2%80%93Shannon_divergence
+
+    INPUTS
+    C0    (space, space) First covariance matrix
+    C1    (space, space) Second covariance matrix
+    m0    (space) First mean vector
+    m1    (space) Second mean vector
+
+    OUTPUTS
+    jsd   Kullback-Leibler divergence
+ 
+    """
+    M = (1/2)*(C0+C1)
+    jsd = (1/2)*KLdiv(C0,M,m0,m1)+(1/2)*KLdiv(C1,M,m0,m1)
+
+    return jsd
 
 def klcomp(binsize):
 
@@ -364,6 +457,7 @@ def klcomp(binsize):
     for ii in np.arange(tdc):
         kldc[ii]   = KLdiv(Cc[ii,:,:]+reg*np.eye(nEOF),Cmc+reg*np.eye(nEOF),m0,m1)
 
+
     # Now for LME
 
     out = np.load('input/CESM_LME_all13_wtd_SVD.npz')
@@ -397,6 +491,103 @@ def klcomp(binsize):
 
     m0 = np.zeros(nEOF)
     m1 = np.zeros(nEOF)
+
+    kld = np.empty(td)
+    for ii in np.arange(td):
+        kld[ii] = KLdiv(C[ii,:,:]+reg*np.eye(nEOF),Cmc+reg*np.eye(nEOF),m0,m1)
+
+    return tC, kld, tCc, kldc
+
+
+def klcomp_samebasis(binsize):
+    '''
+    Same as klcomp but projecting LME and control onto the same reduced basis (from LME) so that the kl distance makes sense!
+    '''
+
+    nens = 13
+    nEOF = 500
+    reg = 1
+
+    # Now for LME
+
+    out = np.load('input/CESM_LME_all13_wtd_SVD.npz')
+    uLME    = out['u']
+    sLME    = out['s']
+    vtLME   = out['vt']
+    lat  = out['lat']
+    lon  = out['lon']
+    time = out['time']
+    nt   = out['nt']
+    nlat = out['nlat']
+    nlon = out['nlon']
+    nens = out['nens']
+
+    # EOF x time*nens
+    datr = (vtLME[:nEOF,:]*sLME[:nEOF,None])
+
+    # reshaped into timexEOFxnens
+    datrr = datr.reshape(nEOF,nt,nens).transpose(1,0,2)
+
+    # Get time-varying reduced-space covariances
+    [C,tC]        = mk_covs(datrr,time,binsize)
+    [td,_,_]      = C.shape
+    Cv            = C.reshape(td,nEOF**2).T
+
+    #### Load ctrl run
+
+    out = np.load('input/CESM_ctrl_wtd_SVD.npz')
+    u    = out['u']
+    s    = out['s']
+    vt   = out['vt']
+    lat  = out['lat']
+    lon  = out['lon']
+    time = out['time']
+    nt   = out['nt']
+    nlat = out['nlat']
+    nlon = out['nlon']
+
+    ds_TS = u.dot(np.diag(s)).dot(vt).reshape(1000,nlat,nlon)
+
+    [nt,nlat,nlon] = np.shape(ds_TS);
+
+    # Reshape the control run to look like a short ensemble simulation with 13 members
+    # New time length for these is 988 = 13*76
+    cnens = 13;
+    tdn   = int(np.floor(1000./cnens)*cnens)
+    el    = int(tdn/cnens)
+
+    # Reshape to give an ensemble axis and transpose to make the ordering consistent
+    ce1 = ds_TS[:(tdn),:,:].reshape(tdn,nlat*nlon).transpose([1,0])
+    ce2 = ce1.reshape(nlat*nlon,el,cnens)
+
+    # time, space, nens
+    ce  = ce2.transpose([1,0,2])
+
+    # Need to compute reduced-space form
+    # pdb.set_trace()
+    cer  = reduce_space_proj(ce,uLME[:,:nEOF])
+
+    [Cc,tCc]       = mk_covs(cer,np.arange(el),binsize)
+    [tdc,_,_]      = Cc.shape
+    Cvc            = Cc.reshape(tdc,nEOF**2).T
+
+    # No smoothing for mean
+    [Ccm,tCcm]       = mk_covs(cer,np.arange(el),1)
+    [tdcm,_,_]       = Ccm.shape
+    Cvcm             = Ccm.reshape(tdcm,nEOF**2).T
+    # Cmc = Cvcm.mean(axis=1, keepdims=True).reshape(nEOF,nEOF)
+    
+    Cmc = mk_avg_cov(cer)
+
+    m0 = np.zeros(nEOF)
+    m1 = np.zeros(nEOF)
+    
+    ### Compute kld for control and LME
+
+    kldc = np.empty(tdc)
+    for ii in np.arange(tdc):
+        kldc[ii] = KLdiv(Cc[ii,:,:]+reg*np.eye(nEOF),Cmc+reg*np.eye(nEOF),m0,m1)
+
 
     kld = np.empty(td)
     for ii in np.arange(td):
