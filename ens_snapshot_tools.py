@@ -205,7 +205,8 @@ def mk_covs(data,time,binsize):
     
     t                  = np.empty(ltis)
     C                  = np.empty([ltis,sd,sd])
-
+    m                  = np.empty([ltis,sd])
+    
     for ii,ti in enumerate(tis):
         
         # Define a time range
@@ -223,6 +224,7 @@ def mk_covs(data,time,binsize):
         datr         = dats.reshape((sd,td*nd))
 
         # Remove the mean over time and ensembles
+        m[ii,:]        = datr.mean(axis=1)
         datnm        = datr - datr.mean(axis=1, keepdims=True)
         
         #import pdb
@@ -240,7 +242,7 @@ def mk_covs(data,time,binsize):
     # Compute dominant changes to covariance
     # [uC,sC,vC] = np.linalg.svd(Cnm, full_matrices=False)
 
-    return C,t
+    return C,t,m
 
 def mk_avg_cov(data):
     
@@ -272,12 +274,13 @@ def mk_avg_cov(data):
     datr         = dats.reshape((sd,td*nd))
 
     # Remove the mean over time and ensembles
+    m            = datr.mean(axis=1)
     datnm        = datr - datr.mean(axis=1, keepdims=True)
 
     # Save the covariance matrix. Warning -- only do this with reduced space! It's big!
     C = 1/(td*nd-1)*datnm.dot(datnm.T)
 
-    return C
+    return C, m
 
 def reduce_space(data,nEOF):
     
@@ -379,6 +382,51 @@ def KLdiv(C0,C1,m0,m1):
     kld = 1/2 * ( np.trace(C1i.dot(C0)) + (m0-m1).T.dot(C1i).dot(m0-m1) + np.log(np.linalg.det(C1)/np.linalg.det(C0)) -d )
 
     return kld
+
+def KLdiv_reg(C0,C1,m0,m1,reg=1,tol=None):
+    """
+    Computes Kullback-Leibler divergence between two (full-rank) Gaussian processes with sample
+    covariances matrices C0 and C1 and sample means m0 and m1. C0 and C1 must be full rank.
+    See https://en.wikipedia.org/wiki/Kullback–Leibler_divergence
+    
+    Here I'm regularizing assuming that C0 is singular. I rotate both into that EOF basis and then add reg along diag.
+
+    INPUTS
+    C0    (space, space) First covariance matrix
+    C1    (space, space) Second covariance matrix
+    m0    (space) First mean vector
+    m1    (space) Second mean vector
+
+    OUTPUTS
+    kld   Kullback-Leibler divergence
+ 
+    """
+#    u1,s1,_ = np.linalg.svd(C1,full_matrices=True)   
+#    if tol==None:
+#        import sys
+#        eps = sys.float_info.epsilon
+#        tol = s.max() * max(C1.shape) * eps
+#    rank = (s1>tol).sum()
+#    u1r  = u[:,:rank]
+    
+    # Get into the reduced-rank space of the second matrix
+    u1r,_,_ = np.linalg.svd(C1,full_matrices=False) 
+    C0t  = u1r.T.dot(C0).dot(u1r)
+    C1t  = u1r.T.dot(C1).dot(u1r)
+
+    # Now find the EOF basis of the even smaller-rank first matrix
+    u0t,s0t,_ = np.linalg.svd(C0t,full_matrices=True)
+    
+    # Project into that EOF space and regularize there
+    C0tt  = u0t.T.dot(C0).dot(u0t)+reg*np.eye(max(C0.shape))
+    C1tt  = u0t.T.dot(C1).dot(u0t)+reg*np.eye(max(C0.shape)) 
+    
+    [_,d] = C1.shape
+    C1i = np.linalg.inv(C1)
+    kld = 1/2 * ( np.trace(C1i.dot(C0)) + (m0-m1).T.dot(C1i).dot(m0-m1) + np.log(np.linalg.det(C1)/np.linalg.det(C0)) -d )
+
+    return kld
+
 
 def JSdiv(C0,C1,m0,m1):
     """
@@ -529,7 +577,7 @@ def klcomp_samebasis(binsize):
     datrr = datr.reshape(nEOF,nt,nens).transpose(1,0,2)
 
     # Get time-varying reduced-space covariances
-    [C,tC]        = mk_covs(datrr,time,binsize)
+    [C,tC,_]        = mk_covs(datrr,time,binsize)
     [td,_,_]      = C.shape
     Cv            = C.reshape(td,nEOF**2).T
 
@@ -567,17 +615,17 @@ def klcomp_samebasis(binsize):
     # pdb.set_trace()
     cer  = reduce_space_proj(ce,uLME[:,:nEOF])
 
-    [Cc,tCc]       = mk_covs(cer,np.arange(el),binsize)
+    [Cc,tCc,_]       = mk_covs(cer,np.arange(el),binsize)
     [tdc,_,_]      = Cc.shape
     Cvc            = Cc.reshape(tdc,nEOF**2).T
 
     # No smoothing for mean
-    [Ccm,tCcm]       = mk_covs(cer,np.arange(el),1)
+    [Ccm,tCcm,_]       = mk_covs(cer,np.arange(el),1)
     [tdcm,_,_]       = Ccm.shape
     Cvcm             = Ccm.reshape(tdcm,nEOF**2).T
     # Cmc = Cvcm.mean(axis=1, keepdims=True).reshape(nEOF,nEOF)
     
-    Cmc = mk_avg_cov(cer)
+    Cmc,_ = mk_avg_cov(cer)
 
     m0 = np.zeros(nEOF)
     m1 = np.zeros(nEOF)
@@ -592,5 +640,100 @@ def klcomp_samebasis(binsize):
     kld = np.empty(td)
     for ii in np.arange(td):
         kld[ii] = KLdiv(C[ii,:,:]+reg*np.eye(nEOF),Cmc+reg*np.eye(nEOF),m0,m1)
+
+    return tC, kld, tCc, kldc
+
+def klcomp_samebasis_reg(binsize,reg=1):
+    '''
+    Same as klcomp but projecting LME and control onto the same reduced basis (from LME) so that the kl distance makes sense!
+    '''
+
+    nens = 13
+    nEOF = 500
+
+    # Now for LME
+
+    out = np.load('input/CESM_LME_all13_wtd_SVD.npz')
+    uLME    = out['u']
+    sLME    = out['s']
+    vtLME   = out['vt']
+    lat  = out['lat']
+    lon  = out['lon']
+    time = out['time']
+    nt   = out['nt']
+    nlat = out['nlat']
+    nlon = out['nlon']
+    nens = out['nens']
+
+    # EOF x time*nens
+    datr = (vtLME[:nEOF,:]*sLME[:nEOF,None])
+
+    # reshaped into timexEOFxnens
+    datrr = datr.reshape(nEOF,nt,nens).transpose(1,0,2)
+
+    # Get time-varying reduced-space covariances
+    [C,tC,_]        = mk_covs(datrr,time,binsize)
+    [td,_,_]      = C.shape
+    Cv            = C.reshape(td,nEOF**2).T
+
+    #### Load ctrl run
+
+    out = np.load('input/CESM_ctrl_wtd_SVD.npz')
+    u    = out['u']
+    s    = out['s']
+    vt   = out['vt']
+    lat  = out['lat']
+    lon  = out['lon']
+    time = out['time']
+    nt   = out['nt']
+    nlat = out['nlat']
+    nlon = out['nlon']
+
+    ds_TS = u.dot(np.diag(s)).dot(vt).reshape(1000,nlat,nlon)
+
+    [nt,nlat,nlon] = np.shape(ds_TS);
+
+    # Reshape the control run to look like a short ensemble simulation with 13 members
+    # New time length for these is 988 = 13*76
+    cnens = 13;
+    tdn   = int(np.floor(1000./cnens)*cnens)
+    el    = int(tdn/cnens)
+
+    # Reshape to give an ensemble axis and transpose to make the ordering consistent
+    ce1 = ds_TS[:(tdn),:,:].reshape(tdn,nlat*nlon).transpose([1,0])
+    ce2 = ce1.reshape(nlat*nlon,el,cnens)
+
+    # time, space, nens
+    ce  = ce2.transpose([1,0,2])
+
+    # Need to compute reduced-space form
+    # pdb.set_trace()
+    cer  = reduce_space_proj(ce,uLME[:,:nEOF])
+
+    [Cc,tCc,_]       = mk_covs(cer,np.arange(el),binsize)
+    [tdc,_,_]      = Cc.shape
+    Cvc            = Cc.reshape(tdc,nEOF**2).T
+
+    # No smoothing for mean
+    [Ccm,tCcm,_]       = mk_covs(cer,np.arange(el),1)
+    [tdcm,_,_]       = Ccm.shape
+    Cvcm             = Ccm.reshape(tdcm,nEOF**2).T
+    # Cmc = Cvcm.mean(axis=1, keepdims=True).reshape(nEOF,nEOF)
+    
+    Cmc,_ = mk_avg_cov(cer)
+
+    m0 = np.zeros(nEOF)
+    m1 = np.zeros(nEOF)
+    
+    ### Compute kld for control and LME
+
+    kldc = np.empty(tdc)
+    for ii in np.arange(tdc):
+        kldc[ii] = KLdiv_reg(Cc[ii,:,:],Cmc,m0,m1,1)
+
+
+    kld = np.empty(td)
+    for ii in np.arange(td):
+        kld[ii] = KLdiv_reg(C[ii,:,:],Cmc,m0,m1,1)
 
     return tC, kld, tCc, kldc
